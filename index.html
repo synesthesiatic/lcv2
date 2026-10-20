@@ -711,7 +711,10 @@
     const total = arrs.reduce((s, a) => s + a.byteLength, 0);
     const out = new Uint8Array(total);
     let off = 0;
-    for (const a of arrs) { out.set(new Uint8Array(a), off); off += a.byteLength; }
+    for (const a of arrs) {
+      const view = ArrayBuffer.isView(a) ? new Uint8Array(a.buffer, a.byteOffset, a.byteLength) : new Uint8Array(a);
+      out.set(view, off); off += a.byteLength;
+    }
     return out.buffer;
   }
 
@@ -763,11 +766,12 @@
     for (let i = 0; i < 4; i++) if (magic[i] !== FILE_MAGIC[i]) return null;
     const headerLen = new DataView(buf, 4, 2).getUint16(0, false);
     if (6 + headerLen > buf.byteLength) return null;
-    const headerBytes = new Uint8Array(buf, 6, headerLen);
+    // slice() copies exactly the header bytes; a view's .buffer would be the WHOLE file
+    const headerBuf = buf.slice(6, 6 + headerLen);
     let header;
-    try { header = JSON.parse(new TextDecoder().decode(headerBytes)); } catch (e) { return null; }
+    try { header = JSON.parse(new TextDecoder().decode(headerBuf)); } catch (e) { return null; }
     const ciphertext = buf.slice(6 + headerLen);
-    return { header, headerBytes: headerBytes.buffer, ciphertext };
+    return { header, headerBytes: headerBuf, ciphertext };
   }
 
   async function encryptToContainer(plainBuf, key, kdfParams, saltB64) {
