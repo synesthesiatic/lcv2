@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LAYERCRYPT — password-based file encryption</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/argon2-browser/1.18.0/argon2-bundled.min.js"></script>
+<style>
+  :root{
+    --bg: #0a0c0b;
+    --surface: #121512;
+    --surface-2: #171b17;
+    --border: #262c25;
+    --text: #e9ede6;
+    --text-muted: #7d8a78;
+    --text-dim: #4d5749;
+    --lime: #c8ff4d;
+    --lime-dim: #8fb838;
+    --blue: #4fb4ff;
+    --blue-dim: #3a7ea3;
+    --danger: #ff6b5e;
+    --amber: #e8b34f;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  :root{color-scheme:dark;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    min-height:100dvh;
+    padding:calc(32px + env(safe-area-inset-top, 0px)) 20px calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wrap{max-width:760px;margin:0 auto;}
+
+  header{margin-bottom:36px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.18em;
+    color:var(--lime);
+    text-transform:uppercase;
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:clamp(28px,6vw,40px);
+    letter-spacing:-0.01em;
+    margin:0 0 12px;
+    line-height:1.05;
+  }
+  h1 span{color:var(--text-dim);}
+  .sub{
+    color:var(--text-muted);
+    font-size:14.5px;
+    line-height:1.55;
+    max-width:56ch;
+    margin:0;
+  }
+
+  .tabs{
+    display:flex;
+    gap:2px;
+    background:var(--border);
+    padding:2px;
+    border-radius:10px;
+    margin:28px 0 24px;
+  }
+  .tab{
+    flex:1;
+    background:var(--surface);
+    border:none;
+    color:var(--text-muted);
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:12px 0;
+    border-radius:8px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab.active{background:var(--surface-2);color:var(--text);}
+  .tab:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  .label{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    display:block;
+    margin-bottom:10px;
+  }
+
+  .dropzone{
+    border:1.5px dashed var(--border);
+    border-radius:10px;
+    padding:26px 18px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    position:relative;
+    display:block;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--lime-dim);
+    background:rgba(200,255,77,0.03);
+  }
+  .dropzone:focus-within{border-color:var(--blue);}
+  .dropzone input{
+    position:absolute;inset:0;opacity:0;cursor:pointer;
+    -webkit-appearance: none;
+  }
+  .dz-title{font-size:14px;color:var(--text);margin:0 0 4px;}
+  .dz-sub{font-size:12.5px;color:var(--text-dim);margin:0;}
+  .dz-file{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--lime);
+    margin:0;
+    word-break:break-all;
+  }
+
+  .row{display:flex;gap:14px;flex-wrap:wrap;}
+  .row .card{flex:1;min-width:220px;}
+
+  .pw-toggle{
+    display:flex;align-items:center;gap:10px;
+    font-size:13.5px;color:var(--text-muted);
+    cursor:pointer;margin-bottom:14px;user-select:none;
+  }
+  .pw-toggle input{accent-color:var(--lime);width:16px;height:16px;}
+  .pw-field{display:none;}
+  .pw-field.show{display:block;}
+
+  .pw-input-wrap{position:relative;}
+  input[type="password"], input[type="text"].pw-input{
+    width:100%;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:14px;
+    padding:11px 40px 11px 12px;
+    border-radius:8px;
+  }
+  input[type="password"]:focus, input.pw-input:focus{
+    outline:2px solid var(--blue);outline-offset:1px;border-color:transparent;
+  }
+  .pw-eye{
+    position:absolute;right:6px;top:50%;transform:translateY(-50%);
+    background:transparent;border:none;color:var(--text-dim);
+    font-family:var(--mono);font-size:11px;letter-spacing:0.04em;
+    text-transform:uppercase;cursor:pointer;padding:6px 8px;
+  }
+  .pw-eye:hover{color:var(--text-muted);}
+
+  .pw-tools{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+  .gen-pw-btn{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--blue);
+    font-family:var(--mono);font-size:11.5px;letter-spacing:0.04em;
+    text-transform:uppercase;padding:8px 12px;border-radius:7px;cursor:pointer;
+  }
+  .gen-pw-btn:hover{border-color:var(--blue-dim);}
+
+  .strength{margin-top:12px;}
+  .strength-bar{
+    height:5px;border-radius:3px;background:var(--surface-2);
+    overflow:hidden;border:1px solid var(--border);
+  }
+  .strength-fill{height:100%;width:0%;transition:width .15s ease, background .15s ease;}
+  .strength-meta{
+    display:flex;justify-content:space-between;
+    font-family:var(--mono);font-size:11px;color:var(--text-dim);
+    margin-top:6px;
+  }
+  .strength-label{font-weight:600;}
+
+  .banner{
+    font-family:var(--mono);font-size:12px;line-height:1.55;
+    border:1px solid var(--border);border-radius:9px;
+    padding:11px 13px;margin-bottom:14px;
+    display:none;
+  }
+  .banner.show{display:block;}
+  .banner.warn{border-color:var(--amber);color:var(--amber);}
+  .banner.error{border-color:var(--danger);color:var(--danger);}
+  .kdf-opt:focus-visible,.gen-pw-btn:focus-visible,.pw-eye:focus-visible,.preview-close:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+
+  details.advanced{
+    border:1px solid var(--border);border-radius:9px;
+    padding:2px 14px;margin-top:14px;
+  }
+  details.advanced summary{
+    cursor:pointer;list-style:none;
+    font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;
+    text-transform:uppercase;color:var(--text-muted);padding:11px 0;
+  }
+  details.advanced summary::-webkit-details-marker{display:none;}
+  details.advanced summary:before{content:'▸ ';color:var(--text-dim);}
+  details.advanced[open] summary:before{content:'▾ ';}
+  .kdf-options{display:flex;gap:8px;padding-bottom:14px;flex-wrap:wrap;}
+  .kdf-opt{
+    flex:1;min-width:120px;
+    background:var(--surface-2);border:1px solid var(--border);
+    border-radius:8px;padding:10px;cursor:pointer;text-align:left;
+  }
+  .kdf-opt.selected{border-color:var(--lime-dim);background:rgba(200,255,77,0.05);}
+  .kdf-opt .name{font-family:var(--mono);font-size:12px;color:var(--text);display:block;margin-bottom:3px;}
+  .kdf-opt .desc{font-size:11px;color:var(--text-dim);display:block;}
+
+  .queue-list {
+    margin-top: 14px;
+    max-height: 120px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+    padding: 4px;
+  }
+  .queue-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+  }
+  .queue-item:not(:last-child) { border-bottom: 1px solid rgba(38,44,37,0.4); }
+  .queue-item .q-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-all;
+    padding-right: 10px;
+  }
+  .queue-item .q-size {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .file-grid{
+    display:grid;
+    width:100%;
+    max-width:280px;
+    aspect-ratio:1/1;
+    margin:18px auto 4px;
+  }
+  .plate{
+    border-radius:7px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    opacity:0.4;
+    transform:scale(0.9);
+    transition:opacity .12s ease, transform .12s ease, background .12s ease, border-color .12s ease;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .plate .n{
+    font-family:var(--mono);font-size:9px;color:var(--text-dim);
+    letter-spacing:0.02em;
+  }
+  .plate.done{
+    opacity:1;transform:scale(1);
+    background:linear-gradient(135deg, rgba(200,255,77,0.16), rgba(79,180,255,0.12));
+    border-color:var(--lime-dim);
+  }
+  .plate.done .n{color:var(--lime);}
+  .plate.active{
+    opacity:1;transform:scale(1);
+    border-color:var(--blue);
+    background:rgba(79,180,255,0.10);
+  }
+  .plate.active .n{color:var(--blue);}
+  .plate.failed{
+    opacity:1;transform:scale(1);
+    border-color:var(--danger);
+    background:rgba(255,107,94,0.10);
+  }
+  .plate.failed .n{color:var(--danger);}
+
+  .btn{
+    width:100%;
+    background:var(--lime);
+    color:#0a0c0b;
+    border:none;
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:14px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    padding:14px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:transform .1s ease, background .15s ease;
+    margin-top:6px;
+  }
+  .btn:hover:not(:disabled){background:#d7ff77;}
+  .btn:active:not(:disabled){transform:scale(0.99);}
+  .btn:disabled{background:var(--surface-2);color:var(--text-dim);cursor:not-allowed;}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+
+  .status{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--text-muted);
+    margin-top:12px;
+    min-height:16px;
+    word-break:break-all;
+  }
+  .status.error{color:var(--danger);}
+  .status.ok{color:var(--lime);}
+
+  .results{display:none;margin-top:16px;}
+  .results.show{display:block;}
+  .result-row{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:9px;
+    padding:12px 14px;
+    margin-bottom:8px;
+  }
+  .result-row .fname{
+    font-family:var(--mono);font-size:12.5px;color:var(--text);
+    word-break:break-all;
+    padding-right:8px;
+  }
+  .result-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;}
+  .result-row a{
+    font-family:var(--mono);font-size:11.5px;
+    color:var(--bg);background:var(--blue);
+    text-decoration:none;padding:7px 12px;border-radius:6px;
+    letter-spacing:0.04em;text-transform:uppercase;
+    white-space:nowrap;
+    cursor:pointer;
+  }
+  .result-row a:hover{background:#7ecaff;}
+
+  .btn-mini{
+    background:var(--surface);
+    border:1px solid var(--border);
+    color:var(--text-muted);
+    font-family:var(--mono);font-size:11.5px;
+    letter-spacing:0.04em;text-transform:uppercase;
+    padding:7px 12px;border-radius:6px;
+    cursor:pointer;white-space:nowrap;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .btn-mini:hover{border-color:var(--lime-dim);color:var(--lime);}
+  .btn-mini:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+
+  /* ---- preview modal ---- */
+  .preview-overlay{
+    display:none;position:fixed;inset:0;z-index:1000;
+    background:rgba(6,8,6,0.72);
+    -webkit-backdrop-filter:blur(3px);
+    backdrop-filter:blur(3px);
+    align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .preview-overlay.show{display:flex;}
+  .preview-modal{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    width:100%;max-width:880px;max-height:85vh;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+  .preview-header{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;padding:13px 16px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .preview-header .fname{
+    font-family:var(--mono);font-size:12.5px;color:var(--text-muted);
+    word-break:break-all;
+  }
+  .preview-close{
+    background:var(--surface-2);border:1px solid var(--border);
+    color:var(--text-muted);width:30px;height:30px;
+    border-radius:8px;cursor:pointer;font-size:15px;line-height:1;
+    flex-shrink:0;
+  }
+  .preview-close:hover{color:var(--danger);border-color:var(--danger);}
+  .preview-body{
+    flex:1;overflow:auto;
+    background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .preview-body.is-text{align-items:stretch;justify-content:stretch;}
+  .preview-body img{max-width:100%;max-height:75vh;object-fit:contain;}
+  .preview-body video{max-width:100%;max-height:75vh;}
+  .preview-body audio{width:min(420px, 80%);margin:56px auto;}
+  .preview-text{
+    margin:0;padding:18px 20px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.6;
+    color:var(--text);white-space:pre-wrap;word-break:break-word;
+    width:100%;box-sizing:border-box;
+  }
+  .preview-fallback{
+    padding:48px 32px;text-align:center;
+    color:var(--text-muted);font-size:13.5px;line-height:1.65;
+    max-width:44ch;
+  }
+  .preview-fallback strong{color:var(--text);}
+
+  footer{
+    margin-top:40px;
+    font-size:12px;
+    color:var(--text-dim);
+    line-height:1.6;
+  }
+  footer strong{color:var(--text-muted);}
+
+  @media (max-width:480px){
+    body{padding:calc(24px + env(safe-area-inset-top, 0px)) 14px calc(60px + env(safe-area-inset-bottom, 0px));}
+    .row{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">// password-based symmetric encryption</p>
+    <h1>LAYER<span>CRYPT</span></h1>
+    <p class="sub">One passphrase, one strong pass of AES-256-GCM per file. The passphrase is stretched through Argon2id — a slow, memory-hard function built specifically to make guessing expensive — so there's no separate key file to lose, mix up, or leave lying around unprotected.</p>
+  </header>
+
+  <div class="banner error" id="secure-context-banner">
+    This page needs a secure context (https:// or localhost) to use the browser's encryption APIs. Open it from a secure address and reload — encryption is disabled until then.
+  </div>
+
+  <div class="banner warn" id="kdf-fallback-banner">
+    Couldn't load the Argon2id library (offline, or the CDN is blocked). Falling back to PBKDF2-SHA256 at 600,000 iterations — still reasonable, but weaker against GPU cracking than Argon2id. Reconnect and reload the page for the stronger option.
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="encrypt" role="tab" aria-selected="true">Encrypt</button>
+    <button class="tab" data-tab="decrypt" role="tab" aria-selected="false">Decrypt</button>
+  </div>
+
+  <section class="panel active" id="panel-encrypt">
+    <div class="card">
+      <span class="label">Files to encrypt</span>
+      <label class="dropzone" id="enc-dropzone">
+        <input type="file" id="enc-file-input" multiple>
+        <p class="dz-title" id="enc-dz-title">Drop files here, or click to browse</p>
+        <p class="dz-sub" id="enc-dz-sub">Images, text, video, audio — select one or many</p>
+      </label>
+      <div class="queue-list" id="enc-queue" style="display:none;"></div>
+      <button type="button" class="btn-mini" id="enc-view-btn" style="display:none;margin-top:10px;">View original</button>
+    </div>
+
+    <div class="card">
+      <span class="label">Passphrase</span>
+      <div class="pw-input-wrap">
+        <input type="password" id="enc-pw-input" placeholder="Enter a strong passphrase" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button type="button" class="pw-eye" id="enc-pw-eye">Show</button>
+      </div>
+      <div class="pw-tools">
+        <button type="button" class="gen-pw-btn" id="enc-pw-gen">Generate random characters</button>
+        <button type="button" class="gen-pw-btn" id="enc-pw-gen-words">Generate memorable phrase</button>
+      </div>
+      <div class="strength" id="enc-strength">
+        <div class="strength-bar"><div class="strength-fill" id="enc-strength-fill"></div></div>
+        <div class="strength-meta">
+          <span class="strength-label" id="enc-strength-label">Enter a passphrase</span>
+          <span id="enc-strength-time"></span>
+        </div>
+      </div>
+      <div class="banner error" id="enc-common-pw-banner">This is one of the most-used passwords in the world — it would be guessed instantly regardless of length.</div>
+      <p class="hint" style="font-size:12px;color:var(--text-dim);margin:8px 0 0;">Words you pick yourself for personal reasons (a name, a pet, an inside joke) are much weaker than they look — anyone who knows you, or a dictionary attack, cuts the guessing space down fast. The generator above picks words at random instead, which is what actually makes a word-based passphrase strong <em>and</em> easy to say out loud to someone.</p>
+
+      <details class="advanced">
+        <summary>Advanced: key-derivation strength</summary>
+        <div class="kdf-options" id="enc-kdf-options">
+          <button type="button" class="kdf-opt" data-kdf="standard">
+            <span class="name">Standard</span>
+            <span class="desc">~1s to unlock, 64 MB cost</span>
+          </button>
+          <button type="button" class="kdf-opt selected" data-kdf="strong">
+            <span class="name">Strong (recommended)</span>
+            <span class="desc">~2-3s to unlock, 256 MB cost</span>
+          </button>
+          <button type="button" class="kdf-opt" data-kdf="max">
+            <span class="name">Maximum</span>
+            <span class="desc">~6-10s to unlock, 512 MB cost</span>
+          </button>
+        </div>
+        <p class="hint" style="font-size:12px;color:var(--text-dim);padding-bottom:14px;margin:0;">Higher cost means every guess an attacker makes against your passphrase also gets slower and more memory-hungry for them. It's stored with the file, so decrypting always uses whatever level you picked here.</p>
+      </details>
+    </div>
+
+    <div class="card">
+      <label class="pw-toggle">
+        <input type="checkbox" id="enc-stego-enable">
+        Disguise output as an image
+      </label>
+      <div class="pw-field" id="enc-stego-field">
+        <label class="dropzone" id="enc-stego-dropzone">
+          <input type="file" id="enc-stego-input" accept="image/*">
+          <p class="dz-title" id="enc-stego-dz-title">Drop a cover image, or click to browse</p>
+          <p class="dz-sub">Reused for every file in this batch</p>
+        </label>
+        <p class="hint" style="font-size:12px;color:var(--text-dim);margin:10px 0 0;">Output keeps the cover image's extension and opens normally everywhere (Discord, Photos, Files). Your real data rides along after it, invisible to anything except this app's Decrypt tab — same passphrase unlocks it, no extra file needed.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="label">Batch progress</span>
+      <div class="file-grid" id="enc-stack"></div>
+      <button class="btn" id="enc-run-btn" disabled>Encrypt batch</button>
+      <p class="status" id="enc-status"></p>
+      <div class="results" id="enc-results"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-decrypt">
+    <div class="card">
+      <span class="label">Encrypted files</span>
+      <label class="dropzone" id="dec-dropzone-file">
+        <input type="file" id="dec-file-input" multiple>
+        <p class="dz-title" id="dec-dz-file-title">Drop .lcv files or disguised images</p>
+        <p class="dz-sub">Disguised images are auto-detected</p>
+      </label>
+      <div class="queue-list" id="dec-queue" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <span class="label">Passphrase</span>
+      <div class="pw-input-wrap">
+        <input type="password" id="dec-pw-input" placeholder="Enter the passphrase used to encrypt" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button type="button" class="pw-eye" id="dec-pw-eye">Show</button>
+      </div>
+      <p class="hint" style="font-size:12px;color:var(--text-dim);margin:10px 0 0;">One passphrase is used for the whole batch. Files from different encryption runs can be mixed — each run's key is derived separately — but any file made with a different passphrase will be reported as failed.</p>
+    </div>
+
+    <div class="card">
+      <span class="label">Batch progress</span>
+      <div class="file-grid" id="dec-stack"></div>
+      <button class="btn" id="dec-run-btn" disabled>Decrypt batch</button>
+      <p class="status" id="dec-status"></p>
+      <div class="results" id="dec-results"></div>
+    </div>
+  </section>
+
+  <div class="preview-overlay" id="preview-overlay">
+    <div class="preview-modal" role="dialog" aria-modal="true" aria-label="File preview">
+      <div class="preview-header">
+        <span class="fname" id="preview-fname"></span>
+        <button type="button" class="preview-close" id="preview-close" aria-label="Close preview">✕</button>
+      </div>
+      <div class="preview-body" id="preview-body"></div>
+    </div>
+  </div>
+
+  <footer>
+    <strong>On sharing a passphrase in person:</strong> a passphrase you say out loud is only as strong as the words in it. Words chosen for personal meaning (names, pets, inside jokes) are guessable — by people who know you, or by a dictionary attack — no matter how long the resulting string looks. The "Generate memorable phrase" button picks several words uniformly at random from a fixed list, which is what actually makes a spoken passphrase both memorable and hard to guess.<br><br>
+    <strong>How it works:</strong> your passphrase is stretched into a 256-bit key with Argon2id (a memory-hard function, not a fast hash) using parameters stored alongside the ciphertext. Each batch gets its own random salt, and each file a fresh random nonce, then one pass of AES-256-GCM — which fails loudly, not silently, if the passphrase, salt, or a single byte is wrong. Nothing here leaves your browser: files are processed locally. The only network requests this page makes are for the Argon2 library code and the web fonts, from public CDNs — never your files or passphrase.
+  </footer>
+
+</div>
+
+<script>
+(() => {
+  // ---------- tabs ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected','true');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  try {
+  const subtle = window.crypto && window.crypto.subtle;
+  const cryptoAvailable = !!subtle && window.isSecureContext !== false;
+  if (!cryptoAvailable) document.getElementById('secure-context-banner').classList.add('show');
+
+  // ================= KDF LAYER =================
+  // Argon2id is memory-hard: unlike PBKDF2/SHA-256 (fast, GPU-parallelizable),
+  // each guess needs real RAM, which sharply limits how many guesses an
+  // attacker can run in parallel on a GPU/ASIC. If the library fails to load
+  // (offline, CDN blocked), we fall back to PBKDF2-SHA256 at a high iteration
+  // count so the tool still works — just with a visible warning, since it's
+  // meaningfully weaker.
+  const KDF_PRESETS = {
+    standard: { time: 2, mem: 65536 },   // 64 MB
+    strong:   { time: 3, mem: 262144 },  // 256 MB
+    max:      { time: 4, mem: 524288 },  // 512 MB
+  };
+  let argon2Ready = null; // Promise<boolean>
+  function checkArgon2() {
+    if (argon2Ready) return argon2Ready;
+    argon2Ready = new Promise(resolve => {
+      let settled = false;
+      const finish = ok => { if (!settled) { settled = true; resolve(ok); } };
+      if (window.argon2 && typeof window.argon2.hash === 'function') { finish(true); return; }
+      let tries = 0;
+      const iv = setInterval(() => {
+        tries++;
+        if (window.argon2 && typeof window.argon2.hash === 'function') { clearInterval(iv); finish(true); }
+        else if (tries > 40) { clearInterval(iv); finish(false); } // ~6s
+      }, 150);
+    });
+    return argon2Ready;
+  }
+  let argon2Loaded = true;
+  checkArgon2().then(ok => {
+    argon2Loaded = ok;
+    if (!ok) document.getElementById('kdf-fallback-banner').classList.add('show');
+  });
+
+  // Container headers come from untrusted files, so clamp KDF parameters
+  // before they reach the KDF — otherwise a crafted file could ask for
+  // gigabytes of memory or hours of work and hang the tab.
+  const KDF_LIMITS = { maxTime: 12, maxMemKiB: 1048576, maxIterations: 5000000 };
+  function validateKdfHeader(h) {
+    if (!h || typeof h !== 'object') throw new Error('Corrupt file header.');
+    if (typeof h.salt !== 'string' || typeof h.iv !== 'string') throw new Error('Corrupt file header.');
+    if (h.kdf === 'argon2id') {
+      if (!Number.isInteger(h.time) || h.time < 1 || h.time > KDF_LIMITS.maxTime ||
+          !Number.isInteger(h.mem) || h.mem < 8 || h.mem > KDF_LIMITS.maxMemKiB) {
+        throw new Error('Unsupported Argon2id parameters in file header.');
+      }
+    } else if (h.kdf === 'pbkdf2') {
+      if (!Number.isInteger(h.iterations) || h.iterations < 1 || h.iterations > KDF_LIMITS.maxIterations) {
+        throw new Error('Unsupported PBKDF2 parameters in file header.');
+      }
+    } else {
+      throw new Error('Unknown key-derivation method in file header.');
+    }
+  }
+
+  async function deriveKey(password, salt, kdfParams) {
+    const ok = await checkArgon2();
+    if (kdfParams.kdf === 'argon2id') {
+      if (!ok) throw new Error('This file needs Argon2id to decrypt, but the library failed to load. Check your connection and reload.');
+      let res;
+      try {
+        res = await window.argon2.hash({
+          pass: password,
+          salt: salt,
+          time: kdfParams.time,
+          mem: kdfParams.mem,
+          parallelism: 1,
+          hashLen: 32,
+          type: window.argon2.ArgonType.Argon2id,
+        });
+      } catch (e) {
+        throw new Error('Argon2id key derivation failed (likely not enough free memory — try a lower strength setting, or close other tabs).');
+      }
+      const raw = res.hash instanceof Uint8Array ? res.hash : new Uint8Array(res.hash);
+      return subtle.importKey('raw', raw, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    }
+    // PBKDF2 (fallback when Argon2id can't load)
+    const baseKey = await subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: kdfParams.iterations || 600000, hash: 'SHA-256' },
+      baseKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async function currentKdfParams() {
+    // If the Argon2 library didn't load, actually use the PBKDF2 fallback the
+    // banner promises (previously encryption just failed in that case).
+    const ok = await checkArgon2();
+    if (!ok) return { kdf: 'pbkdf2', iterations: 600000 };
+    const preset = KDF_PRESETS[selectedKdf] || KDF_PRESETS.strong;
+    return { kdf: 'argon2id', time: preset.time, mem: preset.mem };
+  }
+
+  // ---------- shared crypto helpers ----------
+  function concatBuffers(...arrs) {
+    const total = arrs.reduce((s, a) => s + a.byteLength, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const a of arrs) { out.set(new Uint8Array(a), off); off += a.byteLength; }
+    return out.buffer;
+  }
+
+  function encodeHeader(filename, contentBuf) {
+    const nameBytes = new TextEncoder().encode(filename);
+    const lenBuf = new Uint8Array(2);
+    new DataView(lenBuf.buffer).setUint16(0, nameBytes.byteLength, false);
+    return concatBuffers(lenBuf.buffer, nameBytes.buffer, contentBuf);
+  }
+  function decodeHeader(buf) {
+    const dv = new DataView(buf);
+    const nameLen = dv.getUint16(0, false);
+    const nameBytes = new Uint8Array(buf, 2, nameLen);
+    const filename = new TextDecoder().decode(nameBytes);
+    const content = buf.slice(2 + nameLen);
+    return { filename, content };
+  }
+
+  function arrayBufferToBase64(buf) {
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    return btoa(binary);
+  }
+  function base64ToArrayBuffer(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  // ---------- LayerCrypt v2 container format ----------
+  // MAGIC(4) "LC2\0" | headerLen(2, big-endian) | headerJSON(UTF-8) | ciphertext
+  // headerJSON carries the kdf type/params + salt/iv (all needed pre-decrypt)
+  // and doubles as AES-GCM Additional Authenticated Data, so tampering with
+  // any of those values is caught by the auth tag, not silently accepted.
+  const FILE_MAGIC = new TextEncoder().encode('LC2\0');
+
+  function buildContainer(headerObj, ciphertextBuf) {
+    const headerBytes = new TextEncoder().encode(JSON.stringify(headerObj));
+    const lenBuf = new Uint8Array(2);
+    new DataView(lenBuf.buffer).setUint16(0, headerBytes.byteLength, false);
+    return concatBuffers(FILE_MAGIC.buffer, lenBuf.buffer, headerBytes.buffer, ciphertextBuf);
+  }
+  function parseContainer(buf) {
+    if (buf.byteLength < 6) return null;
+    const magic = new Uint8Array(buf, 0, 4);
+    for (let i = 0; i < 4; i++) if (magic[i] !== FILE_MAGIC[i]) return null;
+    const headerLen = new DataView(buf, 4, 2).getUint16(0, false);
+    if (6 + headerLen > buf.byteLength) return null;
+    const headerBytes = new Uint8Array(buf, 6, headerLen);
+    let header;
+    try { header = JSON.parse(new TextDecoder().decode(headerBytes)); } catch (e) { return null; }
+    const ciphertext = buf.slice(6 + headerLen);
+    return { header, headerBytes: headerBytes.buffer, ciphertext };
+  }
+
+  async function encryptToContainer(plainBuf, key, kdfParams, saltB64) {
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const header = { v: 2, ...kdfParams, salt: saltB64, iv: arrayBufferToBase64(iv.buffer) };
+    const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+    const ct = await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: headerBytes }, key, plainBuf);
+    return buildContainer(header, ct);
+  }
+  async function decryptContainer(buf, keyCache, password) {
+    const parsed = parseContainer(buf);
+    if (!parsed) throw new Error('NOT_LAYERCRYPT');
+    const { header, headerBytes, ciphertext } = parsed;
+    validateKdfHeader(header);
+    const salt = new Uint8Array(base64ToArrayBuffer(header.salt));
+    const iv = new Uint8Array(base64ToArrayBuffer(header.iv));
+    const cacheKey = header.salt + '|' + header.kdf + '|' + (header.time || '') + '|' + (header.mem || '') + '|' + (header.iterations || '');
+    let keyPromise = keyCache.get(cacheKey);
+    if (!keyPromise) {
+      keyPromise = deriveKey(password, salt, header);
+      keyCache.set(cacheKey, keyPromise);
+    }
+    const key = await keyPromise;
+    const pt = await subtle.decrypt({ name: 'AES-GCM', iv, additionalData: headerBytes }, key, ciphertext);
+    return pt;
+  }
+
+  // ---------- steganographic wrapper ----------
+  const STEGO_MAGIC = new TextEncoder().encode('LYRCSTEG');
+  function wrapAsStego(coverBuf, payloadBuf) {
+    const lenBuf = new Uint8Array(4);
+    new DataView(lenBuf.buffer).setUint32(0, payloadBuf.byteLength, false);
+    return concatBuffers(coverBuf, payloadBuf, lenBuf.buffer, STEGO_MAGIC.buffer);
+  }
+  function detectStegoWrapper(buf) {
+    const magicLen = STEGO_MAGIC.byteLength;
+    const footerLen = magicLen + 4;
+    if (buf.byteLength < footerLen) return null;
+    const tail = new Uint8Array(buf, buf.byteLength - magicLen);
+    for (let i = 0; i < magicLen; i++) if (tail[i] !== STEGO_MAGIC[i]) return null;
+    const len = new DataView(buf, buf.byteLength - footerLen, 4).getUint32(0, false);
+    const payloadStart = buf.byteLength - footerLen - len;
+    if (payloadStart < 0) return null;
+    return buf.slice(payloadStart, payloadStart + len);
+  }
+
+  // ---------- password strength ----------
+  const COMMON_PASSWORDS = new Set([
+    'password','123456','123456789','qwerty','12345678','111111','1234567890',
+    '1234567','password1','12345','qwerty123','abc123','letmein','admin',
+    'welcome','monkey','login','iloveyou','000000','dragon','master','sunshine',
+    'princess','football','passw0rd','trustno1','superman','starwars','hello',
+    'freedom','whatever'
+  ]);
+  function estimateStrength(pw) {
+    if (!pw) return { bits: 0, label: 'Enter a passphrase', level: 0, timeStr: '' };
+    const lower = pw.toLowerCase();
+    if (COMMON_PASSWORDS.has(lower)) return { bits: 0, label: 'Extremely weak — a top-used password', level: 0, timeStr: 'instant', isCommon: true };
+
+    // A space-separated run of plain words (a passphrase) needs a different
+    // model than a single string of characters: real words aren't uniformly
+    // random over the alphabet, so counting characters wildly overstates it.
+    // Instead, treat it as "N words, each worth about as much as one pick
+    // from a few-thousand-word vocabulary" — generous for words you made up
+    // yourself, since personally meaningful ones are usually worse than that.
+    const tokens = pw.trim().split(/\s+/).filter(Boolean);
+    const looksLikePhrase = tokens.length >= 2 && tokens.every(t => /^[A-Za-z]+$/.test(t));
+    let bits;
+    if (looksLikePhrase) {
+      const BITS_PER_GUESSED_WORD = 11; // ~2,000-word effective guess space per slot
+      bits = tokens.length * BITS_PER_GUESSED_WORD;
+    } else {
+      let charset = 0;
+      if (/[a-z]/.test(pw)) charset += 26;
+      if (/[A-Z]/.test(pw)) charset += 26;
+      if (/[0-9]/.test(pw)) charset += 10;
+      if (/[^A-Za-z0-9]/.test(pw)) charset += 32;
+      if (charset === 0) charset = 1;
+      bits = pw.length * Math.log2(charset);
+      // Penalize heavy repetition / simple sequences, since raw charset math
+      // overestimates strength for things like "aaaaaaaaaaaa".
+      const uniqueChars = new Set(pw).size;
+      if (uniqueChars < pw.length / 3) bits *= 0.5;
+    }
+
+    // Assume a well-resourced attacker running Argon2id at our own cost
+    // parameters can only manage a modest guess rate per second (memory-hard
+    // KDFs are deliberately expensive) — this is an approximation to give a
+    // rough sense of scale, not a guarantee.
+    const guessesPerSecond = 20;
+    const avgGuesses = Math.pow(2, bits - 1);
+    const seconds = avgGuesses / guessesPerSecond;
+
+    let level, label;
+    if (bits < 40) { level = 0; label = 'Weak'; }
+    else if (bits < 60) { level = 1; label = 'Reasonable'; }
+    else if (bits < 80) { level = 2; label = 'Strong'; }
+    else { level = 3; label = 'Very strong'; }
+
+    return { bits, label, level, timeStr: formatDuration(seconds) };
+  }
+  function formatDuration(seconds) {
+    if (seconds < 1) return 'instant';
+    const units = [
+      ['century', 3153600000], ['year', 31536000], ['day', 86400],
+      ['hour', 3600], ['minute', 60], ['second', 1]
+    ];
+    for (const [name, secs] of units) {
+      if (seconds >= secs) {
+        const n = Math.round(seconds / secs);
+        return `~${n.toLocaleString()} ${name}${n === 1 ? '' : 's'}`;
+      }
+    }
+    return 'instant';
+  }
+  const STRENGTH_COLORS = ['var(--danger)', 'var(--amber)', 'var(--lime-dim)', 'var(--lime)'];
+
+  function wireStrengthMeter(input, fillEl, labelEl, timeEl, commonBanner) {
+    input.addEventListener('input', () => {
+      const r = estimateStrength(input.value);
+      const pct = Math.min(100, (r.bits / 100) * 100);
+      fillEl.style.width = pct + '%';
+      fillEl.style.background = STRENGTH_COLORS[r.level];
+      labelEl.textContent = r.label;
+      labelEl.style.color = STRENGTH_COLORS[r.level];
+      timeEl.textContent = r.timeStr ? `est. crack time: ${r.timeStr}` : '';
+      if (commonBanner) commonBanner.classList.toggle('show', !!r.isCommon);
+    });
+  }
+
+  // A fixed, mid-sized wordlist for randomly-generated passphrases (Diceware-
+  // style). Entropy comes from picking N words uniformly at random from this
+  // list — NOT from the words having any personal meaning. Kept to plain,
+  // unambiguous, easy-to-say-aloud English words.
+  const WORD_LIST_RAW = ['abandon','ability','absorb','academy','accident','acorn','acrobat','action','actor','adapt','admiral','adopt','adult','adventure','advice','afford','afternoon','again','agency','agent','agree','airline','airport','alarm','album','alert','alien','alley','almond','almost','alone','alpine','already','always','amateur','amazing','amber','ambush','among','amount','amuse','anchor','ancient','anger','angle','animal','ankle','anniversary','announce','annual','answer','antenna','antique','anxiety','anyway','apart','apology','appeal','appear','apple','approve','april','arcade','arch','arctic','area','arena','argue','arise','armor','army','around','arrange','arrest','arrive','arrow','art','article','artist','ascend','ashore','aside','asset','assist','assume','athlete','atlas','atom','attach','attack','attend','attic','attract','auction','audio','august','aunt','author','auto','autumn','average','avocado','avoid','awake','award','aware','away','awesome','baby','bacon','badge','baggage','balance','balcony','ball','bamboo','banana','banner','barely','bargain','barrel','basic','basket','battle','beach','beacon','beard','beauty','because','become','before','began','begin','behave','behind','being','belief','believe','belong','below','bench','bend','benefit','beside','better','between','beyond','bicycle','bind','biology','birth','bitter','blade','blanket','blast','bleak','blend','bless','blind','blink','block','blood','bloom','blossom','blouse','blue','blur','board','boast','body','boil','bold','bolt','bonus','border','boring','borrow','boss','bottle','bottom','bounce','boundary','brain','branch','brand','brave','bread','breeze','brick','bridge','brief','bright','bring','broad','broccoli','broken','bronze','brother','brown','brush','bubble','buddy','budget','buffalo','build','bulb','bulk','bundle','bunker','burden','burst','busy','butter','button','buyer','cabbage','cabin','cable','cactus','cage','cake','calm','camera','camp','canal','cancel','candle','candy','cannon','canoe','canvas','canyon','capable','capital','captain','carbon','card','cargo','carpet','carry','cartoon','carve','castle','casual','catalog','catch','category','cattle','caught','cause','caution','cave','ceiling','celery','cement','census','century','cereal','certain','chalk','champion','change','chapter','charge','chase','cheap','check','cheese','chef','cherry','chest','chicken','chief','child','chimney','choice','choose','chronic','chuckle','churn','cigar','cinnamon','circle','citizen','city','civil','claim','clarify','claw','clay','clean','clerk','clever','cliff','climb','clinic','clock','close','cloth','cloud','clover','clown','clump','cluster','clutch','coach','coast','coconut','code','coffee','coil','collect','color','column','combine','comfort','comic','common','company','concert','conduct','confirm','connect','consider','control','convince','cook','cool','copper','coral','core','corn','correct','cost','cotton','couch','country','couple','courage','course','cousin','cover','coyote','crack','craft','cram','crane','crash','crater','crawl','crazy','cream','credit','creek','crew','cricket','crime','crisp','critic','crop','cross','crouch','crowd','crucial','cruise','crumble','crunch','crush','cry','crystal','cube','culture','cupboard','curious','current','curtain','curve','cushion','custom','cycle','damage','dance','danger','daring','dash','daughter','dawn','decade','decide','decline','decorate','deer','defend','define','degree','delay','delight','deliver','demand','denial','dentist','deny','depart','depend','deposit','depth','deputy','derive','desert','design','desk','detail','detect','develop','device','devote','diagram','dial','diamond','diary','dice','diesel','diet','differ','digital','dignity','dinner','dinosaur','direct','dirt','disagree','discover','disease','dish','dismiss','disorder','display','distance','divert','divide','dizzy','doctor','document','dolphin','domain','donate','donkey','donor','door','dose','double','dove','draft','dragon','drama','drastic','draw','dream','dress','drift','drill','drink','drip','drive','drop','drum','dry','duck','dumb','dune','during','dust','duty','eager','eagle','early','earth','easily','east','easy','echo','ecology','economy','edge','edit','educate','effort','eight','either','elbow','elder','electric','elegant','element','elephant','elevator','elite','else','embark','embody','emerge','emotion','employ','empty','enable','enact','endless','endorse','enemy','energy','enforce','engage','engine','enhance','enjoy','enlist','enough','enrich','enroll','ensure','enter','entire','entry','envelope','episode','equal','equip','erase','erode','erosion','error','erupt','escape','essay','essence','estate','eternal','ethics','evidence','evoke','exact','example','excess','exchange','excite','exclude','excuse','execute','exercise','exhibit','exile','exist','exotic','expand','expect','expire','explain','expose','express','extend','extra','fabric','face','faculty','fade','faint','faith','fame','family','famous','fancy','fantasy','farm','fashion','fatal','father','fatigue','fault','favorite','feature','february','federal','fee','feed','feel','female','fence','festival','fetch','fever','fiber','fiction','field','figure','filter','finger','finish','fiscal','fitness','flag','flame','flash','flat','flavor','flee','flight','flip','float','flock','floor','flower','fluid','flush','focus','fog','foil','follow','food','foot','force','forest','forget','fork','fortune','forum','forward','fossil','foster','found','fox','fragile','frame','frequent','fresh','friend','fringe','frog','front','frost','frown','frozen','fruit','fuel','fun','funny','furnace','fury','future','gadget','gain','galaxy','gallery','garden','garlic','garment','gasp','gate','gather','gauge','gaze','general','genius','gentle','genuine','gesture','ghost','giant','gift','giggle','ginger','giraffe','glad','glance','glare','glass','glide','glimpse','globe','gloom','glory','glove','glow','glue','goat','goddess','gold','good','goose','gorilla','gospel','gossip','govern','grab','grace','grain','grant','grape','grass','gravity','great','green','grid','grief','grit','grocery','group','grow','grunt','guard','guess','guide','guilt','guitar','gully','gun','gym','habit','hair','half','hammer','hamster','hand','happy','harbor','hard','harsh','harvest','hazard','head','health','heart','heavy','hedgehog','height','hello','helmet','help','hen','hero','hidden','high','hill','hint','hire','history','hobby','hockey','hold','hollow','honey','hood','hope','horn','horse','hospital','host','hotel','hour','hover','hub','huge','human','humble','humor','hundred','hunt','hurdle','hurry','hurt','husband','hybrid','icon','idea','identify','idle','ignore','image','impact','import','impose','improve','impulse','include','income','indoor','infant','inflict','inform','inherit','inject','inmate','inner','innocent','input','inquiry','insect','inside','inspire','install','intact','interest','into','invest','invite','involve','iron','island','isolate','issue','item','ivory','jacket','jaguar','jar','jazz','jealous','jeans','jelly','jewel','job','join','joke','journal','journey','joy','judge','juice','jump','jungle','junior','junk','just','kangaroo','keen','keep','ketchup','key','kick','kidney','kind','kingdom','kiss','kite','kitten','kiwi','knee','knife','knock','know','label','labor','ladder','lady','lake','lamp','language','laptop','large','later','laugh','laundry','lava','lawn','lawsuit','layer','lazy','leader','leaf','learn','leave','lecture','left','legal','legend','leisure','lemon','length','lens','leopard','lesson','letter','level','liberty','library','license','life','lift','light','limb','limit','linen','link','lion','liquid','list','little','lizard','load','loan','lobster','local','lock','logic','lonely','long','loop','lottery','loud','love','loyal','lucky','lumber','lunar','lunch','luxury','lyrics','machine','magic','magnet','maid','mail','major','mammal','manage','mandate','mango','mansion','manual','maple','marble','march','margin','marine','market','marriage','marvel','mask','massive','master','match','material','matrix','matter','maximum','maze','meadow','mean','measure','meat','mechanic','medal','media','melody','melt','member','memory','mention','menu','mercy','merge','merit','merry','mesh','message','metal','method','middle','midnight','mimic','mind','minimum','minor','minute','miracle','mirror','misery','mistake','mixed','mixture','mobile','model','modify','moment','monitor','monkey','month','moon','moral','morning','mosquito','mother','motion','mountain','mouse','mouth','move','movie','much','muffin','mule','multiply','muscle','museum','mushroom','music','myself','mystery','myth','naive','name','napkin','narrow','nasty','nation','nature','near','neck','need','neglect','neither','nephew','nerve','nest','network','neutral','never','news','next','nice','night','noble','noise','nominee','noodle','normal','north','nose','notable','note','nothing','notice','novel','nurse','nut','oak','object','oblige','obscure','observe','obtain','obvious','occur','ocean','october','odor','offer','office','often','oil','okay','olive','olympic','omit','once','onion','online','only','onset','open','opera','opinion','oppose','option','orange','orbit','orchard','order','ordinary','organ','orient','origin','orphan','ostrich','other','outdoor','outer','output','outside','oval','oven','over','owner','oxygen','oyster','ozone','pact','paddle','page','pair','palace','palm','panda','panel','panic','panther','paper','parade','parent','park','parrot','party','pass','patch','path','patient','patrol','pattern','pause','pave','payment','peace','peanut','pear','peasant','pelican','pen','penalty','pencil','people','pepper','perfect','permit','person','pet','phone','photo','phrase','physical','piano','picnic','picture','piece','pig','pigeon','pilot','pink','pioneer','pipe','pistol','pitch','pizza','place','planet','plastic','plate','play','please','pledge','pluck','plug','plunge','poem','poet','point','polar','pole','police','pond','pony','pool','popular','portion','position','possible','post','potato','pottery','poverty','powder','power','practice','praise','predict','prefer','prepare','present','pretty','prevent','price','pride','primary','print','prison','private','prize','problem','process','produce','profit','program','project','promote','proof','property','prosper','protect','proud','provide','public','pudding','pull','pulp','pulse','pumpkin','punch','pupil','puppy','purchase','purity','purple','purpose','purse','push','puzzle','pyramid','quality','quantum','quarter','question','quick','quit','quiz','quote','rabbit','raccoon','race','rack','radar','radio','rail','rain','raise','rally','ramp','ranch','random','range','rapid','rare','rate','rather','raven','raw','razor','ready','real','reason','rebel','rebuild','recall','receive','recipe','record','recycle','reduce','reflect','reform','refuse','region','regret','regular','reject','relax','release','relief','rely','remain','remember','remind','remove','render','renew','rent','reopen','repair','repeat','replace','report','require','rescue','resemble','resist','resource','respect','result','retire','retreat','return','reunion','reveal','review','reward','rhythm','ribbon','rice','rich','ride','ridge','rifle','right','rigid','ring','riot','ripple','risk','ritual','rival','river','road','roast','robot','robust','rocket','romance','roof','rookie','room','rose','rotate','rough','round','route','royal','rubber','rude','rugby','rule','runway','rural','sadness','saddle','safe','saga','sail','salad','salmon','salon','salute','same','sample','sand','satisfy','satoshi','sauce','sausage','save','scale','scan','scare','scatter','scene','scheme','school','science','scissors','scorpion','scout','scrap','screen','script','scrub','sea','search','season','seat','second','secret','section','security','seed','seek','segment','select','seminar','senior','sense','sentence','series','service','session','settle','setup','seven','shadow','shaft','shallow','shed','shell','sheriff','shield','shift','shine','ship','shiver','shock','shoe','shoot','shop','shore','shoulder','shove','shrimp','shrug','shuffle','shy','sibling','sick','side','siege','sight','sign','silent','silk','silly','silver','similar','simple','since','sing','siren','sister','situate','skate','sketch','ski','skill','skin','skirt','skull','slab','slam','sleep','slender','slice','slide','slight','slim','slogan','slot','slow','slush','small','smart','smile','smoke','smooth','snack','snake','snap','sniff','snow','soap','soccer','social','sock','soda','soft','solar','soldier','solid','solve','someone','song','soon','sorry','sort','soul','sound','soup','source','south','space','spare','spatial','spawn','speak','special','speed','spell','spend','sphere','spider','spike','spin','spirit','split','spoil','sponsor','spoon','sport','spray','spread','spring','spy','square','squeeze','squirrel','stable','stadium','staff','stage','stairs','stamp','stand','start','state','stay','steak','steel','stem','step','stereo','stick','still','sting','stock','stomach','stone','stool','story','stove','strategy','street','strike','strong','struggle','student','stuff','stumble','style','subject','submit','subway','success','such','sudden','suffer','sugar','suggest','suit','summer','sunny','sunset','super','supply','supreme','sure','surface','surge','surprise','surround','survey','suspect','sustain','swallow','swamp','swap','swarm','swear','sweet','swift','swim','swing','switch','sword','symbol','symptom','syrup','system','table','tackle','tail','talent','talk','tank','tape','target','task','taste','tattoo','taxi','teach','team','tell','temple','tenant','tennis','tent','term','test','text','thank','theme','theory','there','thing','this','thought','three','thrive','throw','thumb','thunder','ticket','tide','tiger','tilt','timber','time','tiny','tip','tissue','title','toast','tobacco','today','toddler','toe','together','toilet','token','tomato','tomorrow','tone','tongue','tonight','tool','tooth','topic','topple','torch','tornado','tortoise','toss','total','tourist','toward','tower','town','toy','track','trade','traffic','tragic','train','transfer','trap','trash','travel','tray','treat','tree','trend','trial','tribe','trick','trigger','trim','trip','trophy','trouble','truck','true','truly','trumpet','trust','truth','try','tube','tuition','tumble','tuna','tunnel','turkey','turn','turtle','twelve','twenty','twice','twin','twist','tycoon','ugly','umbrella','uncle','uncover','under','undo','unfair','unfold','unhappy','uniform','unique','unit','universe','unknown','unlock','until','unusual','unveil','update','upgrade','uphold','upon','upper','upset','urban','urge','usage','usual','utility','vacant','vacuum','vague','valid','valley','valve','vanish','vapor','various','vast','vault','vehicle','velvet','vendor','venture','venue','verb','verify','version','very','vessel','veteran','viable','vibrant','vicious','victory','video','view','village','vintage','violin','virtual','virus','visa','visit','visual','vital','vivid','vocal','voice','volcano','volume','vote','voyage','wage','wagon','wait','walk','wall','walnut','want','warfare','warm','warrior','wash','wasp','waste','water','wave','wealth','weapon','wear','weasel','weather','web','wedding','weekend','weird','welcome','west','wet','whale','wheat','wheel','when','where','whip','whisper','wide','width','wife','wild','will','win','window','wine','wing','wink','winner','winter','wire','wisdom','wise','wish','witness','wolf','woman','wonder','wood','wool','word','world','worry','worth','wrap','wreck','wrestle','wrist','write','wrong','yard','year','yellow','young','youth','zebra','zero','zone'];
+  // De-duplicate so every word really has an equal chance (a few words repeat in the raw list).
+  const WORD_LIST = Array.from(new Set(WORD_LIST_RAW));
+
+  function generateStrongPassword(length = 20) {
+    // Deliberately avoids ambiguous look-alike characters (0/O, 1/l/I) so a
+    // password that has to be retyped or read off a screen is less error-prone.
+    const charset = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*-_=+';
+    let out = '';
+    for (let i = 0; i < length; i++) out += charset[randomIndex(charset.length)];
+    return out;
+  }
+
+  // Unbiased index in [0, max) using rejection sampling, so every word in
+  // WORD_LIST has an exactly equal chance of being picked — a generator that
+  // favors some words over others quietly gives back less entropy than it
+  // claims.
+  function randomIndex(max) {
+    const range = Math.floor(0xFFFFFFFF / max) * max;
+    let x;
+    do { x = window.crypto.getRandomValues(new Uint32Array(1))[0]; } while (x >= range);
+    return x % max;
+  }
+  function generateMemorablePhrase(wordCount = 7) {
+    const words = [];
+    for (let i = 0; i < wordCount; i++) words.push(WORD_LIST[randomIndex(WORD_LIST.length)]);
+    const bits = wordCount * Math.log2(WORD_LIST.length);
+    return { phrase: words.join(' '), bits };
+  }
+
+  function wirePasswordField(input, eyeBtn) {
+    eyeBtn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      input.classList.toggle('pw-input', show);
+      eyeBtn.textContent = show ? 'Hide' : 'Show';
+    });
+  }
+
+  // ---------- file preview helpers ----------
+  const TEXT_EXT = new Set([
+    'txt','md','markdown','cs','csx','js','mjs','cjs','ts','tsx','json','jsonc',
+    'py','java','go','rs','c','h','hpp','cpp','cc','sh','bash','zsh','yml','yaml',
+    'xml','html','htm','css','scss','less','csv','tsv','ini','cfg','toml','log',
+    'sql','rb','php','swift','kt','lua','ps1','bat','gd','shader','glsl','hlsl'
+  ]);
+  const IMAGE_MIME = {
+    png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
+    webp:'image/webp', bmp:'image/bmp', svg:'image/svg+xml',
+    heic:'image/heic', heif:'image/heif'
+  };
+  const VIDEO_MIME = { mp4:'video/mp4', m4v:'video/mp4', mov:'video/quicktime', webm:'video/webm', mkv:'video/x-matroska' };
+  const AUDIO_MIME = { mp3:'audio/mpeg', wav:'audio/wav', ogg:'audio/ogg', m4a:'audio/mp4', flac:'audio/flac', aac:'audio/aac' };
+
+  function getExt(filename) {
+    const m = /\.([^.\/\\]+)$/.exec(filename || '');
+    return m ? m[1].toLowerCase() : '';
+  }
+  function categorize(filename) {
+    const ext = getExt(filename);
+    if (TEXT_EXT.has(ext)) return { type: 'text' };
+    if (IMAGE_MIME[ext]) return { type: 'image', mime: IMAGE_MIME[ext] };
+    if (VIDEO_MIME[ext]) return { type: 'video', mime: VIDEO_MIME[ext] };
+    if (AUDIO_MIME[ext]) return { type: 'audio', mime: AUDIO_MIME[ext] };
+    return null;
+  }
+
+  const previewOverlay = document.getElementById('preview-overlay');
+  const previewBody = document.getElementById('preview-body');
+  const previewFname = document.getElementById('preview-fname');
+  const previewCloseBtn = document.getElementById('preview-close');
+  let currentPreviewUrl = null;
+
+  function showPreviewFallback(html) {
+    previewBody.innerHTML = `<div class="preview-fallback">${html}</div>`;
+  }
+
+  async function openPreview(filename, blob) {
+    const cat = categorize(filename);
+    previewFname.textContent = filename;
+    previewBody.className = 'preview-body';
+    previewBody.innerHTML = '';
+    if (currentPreviewUrl) { URL.revokeObjectURL(currentPreviewUrl); currentPreviewUrl = null; }
+    previewOverlay.classList.add('show');
+
+    if (!cat) { showPreviewFallback('No preview available for this file type.'); return; }
+
+    if (cat.type === 'text') {
+      previewBody.classList.add('is-text');
+      let text = '';
+      try { text = await blob.text(); } catch (e) { text = ''; }
+      const MAX_CHARS = 500000;
+      let truncated = false;
+      if (text.length > MAX_CHARS) { text = text.slice(0, MAX_CHARS); truncated = true; }
+      const pre = document.createElement('pre');
+      pre.className = 'preview-text';
+      pre.textContent = text + (truncated ? '\n\n… truncated for preview — save the file to see the rest.' : '');
+      previewBody.appendChild(pre);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    currentPreviewUrl = url;
+    const ext = getExt(filename);
+
+    if (cat.type === 'image') {
+      const img = document.createElement('img');
+      img.alt = filename;
+      img.onerror = () => {
+        const isHeic = ext === 'heic' || ext === 'heif';
+        showPreviewFallback(
+          `This browser can't decode <strong>.${ext}</strong> images directly.` +
+          (isHeic ? ' HEIC/HEIF is Apple\u2019s photo format, and most desktop browsers don\u2019t support it natively.' : '') +
+          ' Save the file and open it in your OS image viewer instead.'
+        );
+      };
+      img.src = url;
+      previewBody.appendChild(img);
+    } else if (cat.type === 'video') {
+      const video = document.createElement('video');
+      video.controls = true;
+      video.onerror = () => showPreviewFallback(`This browser can't play this video's codec or container. Save it and open with a native player instead.`);
+      video.src = url;
+      previewBody.appendChild(video);
+    } else if (cat.type === 'audio') {
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.onerror = () => showPreviewFallback(`This browser can't play this audio format. Save it and open with a native player instead.`);
+      audio.src = url;
+      previewBody.appendChild(audio);
+    }
+  }
+  function closePreview() {
+    previewOverlay.classList.remove('show');
+    previewBody.innerHTML = '';
+    if (currentPreviewUrl) { URL.revokeObjectURL(currentPreviewUrl); currentPreviewUrl = null; }
+  }
+  previewCloseBtn.addEventListener('click', closePreview);
+  previewOverlay.addEventListener('click', e => { if (e.target === previewOverlay) closePreview(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
+
+  // ---------- batch progress grid ----------
+  function computeGrid(n) {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    return { cols, rows, total: cols * rows };
+  }
+  function renderStack(container, count) {
+    container.innerHTML = '';
+    if (count <= 0) { container.style.gridTemplateColumns = ''; container.style.gridTemplateRows = ''; return; }
+    const { cols, rows, total } = computeGrid(count);
+    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    const gap = cols > 15 ? 1 : cols > 8 ? 2 : 4;
+    container.style.gap = gap + 'px';
+    const showLabels = cols <= 10;
+    for (let i = 0; i < total; i++) {
+      const cell = document.createElement('div');
+      if (i < count) {
+        cell.className = 'plate';
+        cell.dataset.index = i;
+        if (showLabels) {
+          const n = document.createElement('span');
+          n.className = 'n';
+          n.textContent = i + 1;
+          cell.appendChild(n);
+        }
+      } else {
+        cell.className = 'plate';
+        cell.style.visibility = 'hidden';
+      }
+      container.appendChild(cell);
+    }
+  }
+  function setFileState(container, index, state) {
+    const plate = container.querySelector(`.plate[data-index="${index}"]`);
+    if (!plate) return;
+    plate.classList.remove('active', 'done', 'failed');
+    if (state) plate.classList.add(state);
+  }
+
+  // File names are user-controlled — build rows with textContent, never innerHTML.
+  function appendQueueItem(container, file) {
+    const item = document.createElement('div');
+    item.className = 'queue-item';
+    const nm = document.createElement('span');
+    nm.className = 'q-name';
+    nm.textContent = file.name;
+    const sz = document.createElement('span');
+    sz.className = 'q-size';
+    sz.textContent = formatBytes(file.size);
+    item.appendChild(nm);
+    item.appendChild(sz);
+    container.appendChild(item);
+  }
+
+  // Result links hold object URLs; free them when results are cleared.
+  const liveResultUrls = [];
+  function revokeResultUrls() { while (liveResultUrls.length) URL.revokeObjectURL(liveResultUrls.pop()); }
+
+  function formatBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+
+  // ================= ENCRYPT PANEL =================
+  const encDropzone = document.getElementById('enc-dropzone');
+  const encFileInput = document.getElementById('enc-file-input');
+  const encDzTitle = document.getElementById('enc-dz-title');
+  const encDzSub = document.getElementById('enc-dz-sub');
+  const encQueue = document.getElementById('enc-queue');
+  const encPwInput = document.getElementById('enc-pw-input');
+  const encPwEye = document.getElementById('enc-pw-eye');
+  const encPwGen = document.getElementById('enc-pw-gen');
+  const encPwGenWords = document.getElementById('enc-pw-gen-words');
+  const encStrengthFill = document.getElementById('enc-strength-fill');
+  const encStrengthLabel = document.getElementById('enc-strength-label');
+  const encStrengthTime = document.getElementById('enc-strength-time');
+  const encCommonBanner = document.getElementById('enc-common-pw-banner');
+  const encStegoEnable = document.getElementById('enc-stego-enable');
+  const encStegoField = document.getElementById('enc-stego-field');
+  const encStegoDropzone = document.getElementById('enc-stego-dropzone');
+  const encStegoInput = document.getElementById('enc-stego-input');
+  const encStegoDzTitle = document.getElementById('enc-stego-dz-title');
+  const encRunBtn = document.getElementById('enc-run-btn');
+  const encStatus = document.getElementById('enc-status');
+  const encResults = document.getElementById('enc-results');
+  const encStackEl = document.getElementById('enc-stack');
+  const encKdfOptions = document.getElementById('enc-kdf-options');
+
+  let encFilesList = [];
+  let encBusy = false;
+  let encStegoCoverFile = null;
+  let selectedKdf = 'strong';
+  renderStack(encStackEl, 0);
+  wirePasswordField(encPwInput, encPwEye);
+  wireStrengthMeter(encPwInput, encStrengthFill, encStrengthLabel, encStrengthTime, encCommonBanner);
+
+  encKdfOptions.querySelectorAll('.kdf-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      encKdfOptions.querySelectorAll('.kdf-opt').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedKdf = btn.dataset.kdf;
+    });
+  });
+
+  encPwGen.addEventListener('click', () => {
+    const pw = generateStrongPassword(20);
+    encPwInput.value = pw;
+    encPwInput.type = 'text';
+    encPwEye.textContent = 'Hide';
+    encPwInput.dispatchEvent(new Event('input'));
+    encStatus.textContent = 'Generated — copy it into a password manager now. There is no way to recover your files without it.';
+    encStatus.classList.remove('error', 'ok');
+  });
+
+  encPwGenWords.addEventListener('click', () => {
+    const { phrase, bits } = generateMemorablePhrase(7);
+    encPwInput.value = phrase;
+    encPwInput.type = 'text';
+    encPwEye.textContent = 'Hide';
+    encPwInput.dispatchEvent(new Event('input'));
+    encStatus.textContent = `Generated (~${Math.round(bits)} bits, truly random — safe to say aloud or share in person). Write it down or save it; it won't be shown again.`;
+    encStatus.classList.remove('error', 'ok');
+  });
+
+  function updateEncButtonState() {
+    if (!cryptoAvailable) { encRunBtn.disabled = true; return; }
+    if (encBusy) { encRunBtn.disabled = true; return; }
+    const stegoOk = !encStegoEnable.checked || !!encStegoCoverFile;
+    encRunBtn.disabled = encFilesList.length === 0 || !encPwInput.value || !stegoOk;
+  }
+  encPwInput.addEventListener('input', updateEncButtonState);
+
+  encDropzone.addEventListener('dragover', e => { e.preventDefault(); encDropzone.classList.add('drag'); });
+  encDropzone.addEventListener('dragleave', () => encDropzone.classList.remove('drag'));
+  encDropzone.addEventListener('drop', e => {
+    e.preventDefault(); encDropzone.classList.remove('drag');
+    if (e.dataTransfer.files.length) { encFileInput.files = e.dataTransfer.files; handleEncFiles(e.dataTransfer.files); }
+  });
+  encFileInput.addEventListener('change', () => { if (encFileInput.files.length) handleEncFiles(encFileInput.files); });
+
+  function handleEncFiles(files) {
+    if (encBusy) return;
+    encFilesList = Array.from(files);
+    encFileInput.value = '';
+    revokeResultUrls();
+    encResults.classList.remove('show');
+    encResults.innerHTML = '';
+    encStatus.textContent = '';
+    renderStack(encStackEl, encFilesList.length);
+
+    if (encFilesList.length === 0) {
+      encDzTitle.textContent = "Drop files here, or click to browse";
+      encDzTitle.classList.remove('dz-file');
+      encDzSub.style.display = 'block';
+      encQueue.style.display = 'none';
+    } else if (encFilesList.length === 1) {
+      const file = encFilesList[0];
+      encDzTitle.textContent = file.name;
+      encDzTitle.classList.add('dz-file');
+      encDzSub.textContent = formatBytes(file.size);
+      encDzSub.style.display = 'block';
+      encQueue.style.display = 'none';
+    } else {
+      encDzTitle.textContent = `${encFilesList.length} files selected`;
+      encDzTitle.classList.add('dz-file');
+      encDzSub.style.display = 'none';
+      encQueue.innerHTML = '';
+      encFilesList.forEach(file => {
+        appendQueueItem(encQueue, file);
+      });
+      encQueue.style.display = 'block';
+    }
+
+    const encViewBtn = document.getElementById('enc-view-btn');
+    if (encFilesList.length === 1 && categorize(encFilesList[0].name)) {
+      encViewBtn.style.display = '';
+      encViewBtn.onclick = () => openPreview(encFilesList[0].name, encFilesList[0]);
+    } else {
+      encViewBtn.style.display = 'none';
+    }
+    updateEncButtonState();
+  }
+
+  encStegoEnable.addEventListener('change', () => {
+    encStegoField.classList.toggle('show', encStegoEnable.checked);
+    updateEncButtonState();
+  });
+  encStegoDropzone.addEventListener('dragover', e => { e.preventDefault(); encStegoDropzone.classList.add('drag'); });
+  encStegoDropzone.addEventListener('dragleave', () => encStegoDropzone.classList.remove('drag'));
+  encStegoDropzone.addEventListener('drop', e => {
+    e.preventDefault(); encStegoDropzone.classList.remove('drag');
+    if (e.dataTransfer.files.length) { encStegoInput.files = e.dataTransfer.files; handleStegoCover(e.dataTransfer.files[0]); }
+  });
+  encStegoInput.addEventListener('change', () => { if (encStegoInput.files.length) handleStegoCover(encStegoInput.files[0]); });
+  function handleStegoCover(file) {
+    encStegoCoverFile = file;
+    encStegoDzTitle.textContent = file.name;
+    encStegoDzTitle.classList.add('dz-file');
+    updateEncButtonState();
+  }
+
+  function createResultRow(container, filename, blob) {
+    const row = document.createElement('div');
+    row.className = 'result-row';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'fname';
+    nameSpan.textContent = filename;
+    row.appendChild(nameSpan);
+    const saveLink = document.createElement('a');
+    saveLink.textContent = 'Save';
+    const saveUrl = URL.createObjectURL(blob);
+    liveResultUrls.push(saveUrl);
+    saveLink.href = saveUrl;
+    saveLink.download = filename;
+    row.appendChild(saveLink);
+    container.appendChild(row);
+  }
+
+  const MAX_FILE_BYTES = 1.9 * 1024 * 1024 * 1024; // AES-GCM in browsers tops out near 2 GB
+
+  encRunBtn.addEventListener('click', async () => {
+    if (encBusy || !cryptoAvailable || !encFilesList.length || !encPwInput.value) return;
+    encBusy = true;
+    const files = encFilesList.slice();
+    encRunBtn.disabled = true;
+    revokeResultUrls();
+    encResults.innerHTML = '';
+    encResults.classList.remove('show');
+    encStatus.classList.remove('error', 'ok');
+    renderStack(encStackEl, files.length);
+
+    try {
+      const kdfParams = await currentKdfParams();
+      const salt = window.crypto.getRandomValues(new Uint8Array(16));
+      const saltB64 = arrayBufferToBase64(salt.buffer);
+
+      encStatus.textContent = 'Deriving key from passphrase (this is deliberately slow — that\u2019s what protects it)…';
+      const key = await deriveKey(encPwInput.value, salt, kdfParams);
+
+      let successCount = 0;
+      const failures = [];
+      for (let fIdx = 0; fIdx < files.length; fIdx++) {
+        const file = files[fIdx];
+        setFileState(encStackEl, fIdx, 'active');
+        encStatus.textContent = `[${fIdx + 1}/${files.length}] Encrypting ${file.name}…`;
+
+        try {
+          if (file.size > MAX_FILE_BYTES) throw new Error('file is too large for in-browser encryption (limit ≈ 1.9 GB)');
+          const contentBuf = await file.arrayBuffer();
+          const plainBuf = encodeHeader(file.name, contentBuf);
+          const container = await encryptToContainer(plainBuf, key, kdfParams, saltB64);
+
+          let outBuf = container;
+          let outMime = 'application/octet-stream';
+          let outName = file.name + '.lcv';
+
+          if (encStegoEnable.checked && encStegoCoverFile) {
+            const coverBuf = await encStegoCoverFile.arrayBuffer();
+            outBuf = wrapAsStego(coverBuf, container);
+            outMime = encStegoCoverFile.type || 'image/jpeg';
+            const coverExt = getExt(encStegoCoverFile.name);
+            outName = file.name + (coverExt ? ('.' + coverExt) : '.jpg');
+          }
+
+          createResultRow(encResults, outName, new Blob([outBuf], { type: outMime }));
+          setFileState(encStackEl, fIdx, 'done');
+          successCount++;
+        } catch (fileErr) {
+          console.error(fileErr);
+          setFileState(encStackEl, fIdx, 'failed');
+          failures.push(`${file.name} (${fileErr.message || 'error'})`);
+        }
+      }
+
+      encResults.classList.add('show');
+      encStatus.textContent = `Done — encrypted ${successCount}/${files.length} files.` +
+        (failures.length ? ' Failed: ' + failures.join('; ') : '');
+      encStatus.classList.add(successCount === files.length ? 'ok' : 'error');
+    } catch (err) {
+      console.error(err);
+      encStatus.textContent = 'Batch encryption failed: ' + err.message;
+      encStatus.classList.add('error');
+    } finally {
+      encBusy = false;
+      updateEncButtonState();
+    }
+  });
+
+  // ================= DECRYPT PANEL =================
+  const decDropzoneFile = document.getElementById('dec-dropzone-file');
+  const decFileInput = document.getElementById('dec-file-input');
+  const decDzFileTitle = document.getElementById('dec-dz-file-title');
+  const decQueue = document.getElementById('dec-queue');
+  const decPwInput = document.getElementById('dec-pw-input');
+  const decPwEye = document.getElementById('dec-pw-eye');
+  const decRunBtn = document.getElementById('dec-run-btn');
+  const decStatus = document.getElementById('dec-status');
+  const decResults = document.getElementById('dec-results');
+  const decStackEl = document.getElementById('dec-stack');
+
+  let decFilesList = [];
+  let decBusy = false;
+  renderStack(decStackEl, 0);
+  wirePasswordField(decPwInput, decPwEye);
+
+  function updateDecButtonState() {
+    decRunBtn.disabled = !cryptoAvailable || decBusy || decFilesList.length === 0 || !decPwInput.value;
+  }
+  decPwInput.addEventListener('input', updateDecButtonState);
+
+  decDropzoneFile.addEventListener('dragover', e => { e.preventDefault(); decDropzoneFile.classList.add('drag'); });
+  decDropzoneFile.addEventListener('dragleave', () => decDropzoneFile.classList.remove('drag'));
+  decDropzoneFile.addEventListener('drop', e => {
+    e.preventDefault(); decDropzoneFile.classList.remove('drag');
+    if (e.dataTransfer.files.length) { decFileInput.files = e.dataTransfer.files; handleDecFiles(e.dataTransfer.files); }
+  });
+  decFileInput.addEventListener('change', () => { if (decFileInput.files.length) handleDecFiles(decFileInput.files); });
+
+  function handleDecFiles(files) {
+    if (decBusy) return;
+    decFilesList = Array.from(files);
+    decFileInput.value = '';
+    revokeResultUrls();
+    decDzFileTitle.textContent = decFilesList.length === 1 ? decFilesList[0].name : `${decFilesList.length} encrypted files`;
+    decDzFileTitle.classList.add('dz-file');
+    decResults.classList.remove('show');
+    decResults.innerHTML = '';
+    decStatus.textContent = '';
+    renderStack(decStackEl, decFilesList.length);
+
+    decQueue.innerHTML = '';
+    decFilesList.forEach(f => {
+      appendQueueItem(decQueue, f);
+    });
+    decQueue.style.display = decFilesList.length ? 'block' : 'none';
+    updateDecButtonState();
+  }
+
+  function appendDecResultRow(filename, blob, decCat) {
+    const row = document.createElement('div');
+    row.className = 'result-row';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'fname';
+    nameSpan.textContent = filename;
+    row.appendChild(nameSpan);
+
+    const actions = document.createElement('div');
+    actions.className = 'result-actions';
+    if (decCat) {
+      const viewBtn = document.createElement('button');
+      viewBtn.type = 'button';
+      viewBtn.className = 'btn-mini';
+      viewBtn.textContent = 'View';
+      viewBtn.onclick = () => openPreview(filename, blob);
+      actions.appendChild(viewBtn);
+    }
+    const saveLink = document.createElement('a');
+    saveLink.textContent = 'Save';
+    const saveUrl = URL.createObjectURL(blob);
+    liveResultUrls.push(saveUrl);
+    saveLink.href = saveUrl;
+    saveLink.download = filename;
+    actions.appendChild(saveLink);
+    row.appendChild(actions);
+    decResults.appendChild(row);
+  }
+  function appendDecErrorRow(filename, message) {
+    const row = document.createElement('div');
+    row.className = 'result-row';
+    row.style.borderColor = 'var(--danger)';
+    const errSpan = document.createElement('span');
+    errSpan.className = 'fname';
+    errSpan.style.color = 'var(--danger)';
+    errSpan.textContent = `${filename} ➔ ${message}`;
+    row.appendChild(errSpan);
+    decResults.appendChild(row);
+  }
+
+  decRunBtn.addEventListener('click', async () => {
+    if (decBusy || !cryptoAvailable || !decFilesList.length || !decPwInput.value) return;
+    decBusy = true;
+    const files = decFilesList.slice();
+    decRunBtn.disabled = true;
+    revokeResultUrls();
+    decResults.innerHTML = '';
+    decResults.classList.remove('show');
+    decStatus.classList.remove('error', 'ok');
+    renderStack(decStackEl, files.length);
+
+    const keyCache = new Map();
+    let solvedCount = 0;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setFileState(decStackEl, i, 'active');
+        decStatus.textContent = `[${i + 1}/${files.length}] Reading ${file.name}…`;
+
+        try {
+          const rawBuf = await file.arrayBuffer();
+          let containerBuf = rawBuf;
+          const stegoPayload = detectStegoWrapper(rawBuf);
+          if (stegoPayload) containerBuf = stegoPayload;
+
+          decStatus.textContent = `[${i + 1}/${files.length}] Decrypting ${file.name}…`;
+          const plainBuf = await decryptContainer(containerBuf, keyCache, decPwInput.value);
+          const { filename, content } = decodeHeader(plainBuf);
+          const decCat = categorize(filename);
+          const blob = new Blob([content], decCat && decCat.mime ? { type: decCat.mime } : undefined);
+
+          appendDecResultRow(filename, blob, decCat);
+          setFileState(decStackEl, i, 'done');
+          solvedCount++;
+        } catch (err) {
+          console.error(err);
+          setFileState(decStackEl, i, 'failed');
+          if (err.message === 'NOT_LAYERCRYPT') {
+            appendDecErrorRow(file.name, 'Not a LayerCrypt file (or no disguised payload found).');
+          } else if (/Argon2id|PBKDF2|key-derivation|file header/.test(err.message)) {
+            appendDecErrorRow(file.name, err.message);
+          } else {
+            appendDecErrorRow(file.name, 'Wrong passphrase, or the file was altered.');
+          }
+        }
+      }
+
+      decResults.classList.add('show');
+      decStatus.textContent = `Done — recovered ${solvedCount}/${files.length} files.`;
+      decStatus.classList.add(solvedCount > 0 ? 'ok' : 'error');
+    } catch (err) {
+      console.error(err);
+      decStatus.textContent = 'Batch decryption failed: ' + err.message;
+      decStatus.classList.add('error');
+    } finally {
+      decBusy = false;
+      updateDecButtonState();
+    }
+  });
+
+  } catch (err) {
+    console.error('LayerCrypt setup failed:', err);
+  }
+})();
+</script>
+</body>
+</html>
